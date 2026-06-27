@@ -1,0 +1,30 @@
+echo "# Object files
+*.o
+*.obj
+*.bin
+*.iso
+
+# Build files
+build/
+bin/
+dist/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS specific
+*.img
+*.flp
+*.dmg
+*.elf
+
+# Debug files
+*.map
+*.sym
+*.lst
+
+# Old backups
+*.bak
+*.old
+*~" > .gitignore
