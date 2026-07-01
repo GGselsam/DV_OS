@@ -2,7 +2,7 @@
 [org 0x7c00]
 
 start:
-    ; Disable interrupts and setup segments
+    ; Setup segments and stack
     cli
     xor ax, ax
     mov ds, ax
@@ -20,11 +20,12 @@ start:
 
     ; Load kernel from disk
     call load_kernel
-    ; Switch to long mode
+    
+    ; Switch to 64-bit long mode
     call switch_to_long_mode
 
-    ; Jump to kernel (address 0x100000)
-    jmp 0x0000:0x100000
+    ; Jump to kernel at 0x10000
+    jmp 0x0000:0x10000
 
 print_string_16:
     mov ah, 0x0E
@@ -41,15 +42,14 @@ load_kernel:
     mov si, msg_loading_kernel
     call print_string_16
 
-    ; Load kernel from disk to 0x100000
-    ; Address = 0x1000:0x0000 = 0x100000
+    ; Load kernel to 0x10000 (segment 0x1000, offset 0x0000)
     mov ax, 0x1000
     mov es, ax
     xor bx, bx
 
     ; BIOS read sectors function
     mov ah, 0x02
-    mov al, 30          ; Number of sectors to read
+    mov al, 60          ; Number of sectors to read (60 * 512 = 30.720 bytes)
     mov ch, 0           ; Cylinder 0
     mov cl, 2           ; Sector 2 (after bootloader)
     mov dh, 0           ; Head 0
@@ -64,7 +64,20 @@ disk_error:
     call print_string_16
     jmp $
 
+; Enable A20 line via fast method (port 0x92)
+enable_a20_fast:
+    in al, 0x92
+    test al, 0x02
+    jnz .already_enabled
+    or al, 0x02
+    out 0x92, al
+.already_enabled:
+    ret
+
 switch_to_long_mode:
+    ; Enable A20
+    call enable_a20_fast
+
     ; Clear page tables (16KB)
     mov edi, 0x1000
     mov cr3, edi
@@ -74,33 +87,36 @@ switch_to_long_mode:
 
     ; Setup PML4 (0x1000) -> PDPT (0x2000)
     mov edi, 0x1000
-    mov dword [edi], 0x2003
+    mov dword [edi], 0x2003      ; Present + Read/Write
+    mov dword [edi+4], 0
 
     ; Setup PDPT (0x2000) -> PDT (0x3000)
     mov edi, 0x2000
-    mov dword [edi], 0x3003
+    mov dword [edi], 0x3003      ; Present + Read/Write
+    mov dword [edi+4], 0
 
     ; Setup PDT (0x3000) -> PT (0x4000)
     mov edi, 0x3000
-    mov dword [edi], 0x4003
+    mov dword [edi], 0x4003      ; Present + Read/Write
+    mov dword [edi+4], 0
 
-    ; Fill PT (0x4000) - 512 entries of 4KB = 2MB
+    ; Fill PT (0x4000) - 512 entries mapping first 2MB
     mov edi, 0x4000
-    mov ebx, 0x00000003
+    mov ebx, 0x00000003          ; Address 0x0000 + Present + Read/Write
     mov ecx, 512
 .set_pt:
     mov dword [edi], ebx
     mov dword [edi+4], 0
     add edi, 8
-    add ebx, 0x1000
+    add ebx, 0x1000              ; Next 4KB page
     loop .set_pt
 
-    ; Enable PAE
+    ; Enable PAE (Physical Address Extension)
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
 
-    ; Enable LME (Long Mode Enable) in MSR
+    ; Enable LME (Long Mode Enable) in EFER MSR
     mov ecx, 0xC0000080
     rdmsr
     or eax, 1 << 8
@@ -108,55 +124,60 @@ switch_to_long_mode:
 
     ; Enable protected mode and paging
     mov eax, cr0
-    or eax, (1 << 31) | (1 << 0)
+    or eax, (1 << 31) | (1 << 0)  ; PG (paging) and PE (protected mode)
     mov cr0, eax
 
     ; Load GDT
     lgdt [gdt_descriptor]
 
-    ; Far jump to long mode
-    push 0x08
-    push .long_mode_entry
-    retf
+    ; Far jump to 64-bit mode
+    jmp 0x08:long_mode_start
 
 [bits 64]
-.long_mode_entry:
+long_mode_start:
     ; Setup data segments
     mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov ss, ax
+    mov fs, ax
+    mov gs, ax
 
-    ; Clear screen in 64-bit mode
+    ; Clear screen
     mov edi, 0xB8000
     mov ecx, 80 * 25
-    mov ax, 0x0F20      ; Space with white on black attribute
+    mov ax, 0x0F20                ; Space with white on black attribute
     rep stosw
 
     ; Print long mode message
     mov edi, 0xB8000
     mov rsi, msg_long_mode
     mov ah, 0x0F
-.print:
+.print_long:
     lodsb
     test al, al
-    jz .done
+    jz .done_long
     stosw
-    jmp .print
-.done:
+    jmp .print_long
+.done_long:
 
-    ret
+    ; Setup stack (make sure it doesn't conflict with kernel)
+    mov rsp, 0x90000
 
+    ; Jump to kernel
+    jmp 0x10000
+
+; 64-bit GDT
 gdt_64:
     dq 0                     ; Null descriptor
-.code:
-    dq 0x00209A0000000000    ; 64-bit code segment
+.code: 
+    dq 0x00AF9A000000FFFF    ; 64-bit code segment (Present, Executable, Readable)
 .data:
-    dq 0x0000920000000000    ; 64-bit data segment
+    dq 0x00AF92000000FFFF    ; 64-bit data segment (Present, Writable)
 
 gdt_descriptor:
-    dw $ - gdt_64 - 1
-    dq gdt_64
+    dw $ - gdt_64 - 1        ; Limit
+    dq gdt_64                ; Base address
 
 msg_loading db "DV OS: Loading...", 0x0D, 0x0A, 0
 msg_loading_kernel db "Loading kernel from disk...", 0x0D, 0x0A, 0
@@ -165,4 +186,4 @@ msg_long_mode db "DV OS: Entered 64-bit Long Mode!", 0
 
 times 510-($-$$) db 0
 dw 0xAA55
-; i'm fucking it's launguarge
+; I'm fucking it's languarge
