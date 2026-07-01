@@ -7,7 +7,6 @@ MKDIR = mkdir -p
 
 BUILD_DIR = build
 
-# Компилятор флаги
 CFLAGS = -m64 -ffreestanding -nostdlib -fno-stack-protector -fno-pie
 CFLAGS += -I. -I./drivers -I./drivers/VGA -I./kernel
 
