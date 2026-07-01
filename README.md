@@ -19,6 +19,14 @@
 - LD
 - QEMU
 
+- ## 📌 Project rules
+
+- **Architecture:** x86_64 only
+- **Language:** English only (code, comments, commits)
+- **Comments:** Profanity is allowed and welcome. Fuck yeah.
+- **Allowed languages:** C, Assembly, Rust, Bash, Python (only if Bash can't handle it), Makefile
+- **Banned languages:** C++, Zig, and others
+
 ### Commands
 
 ```bash
@@ -26,11 +34,3 @@ make build   # Build the OS
 make run     # Run in QEMU
 make clean   # Clean build files
 make help    # Show all commands
-
-📌 Project rules
-
-    Architecture: x86_64 only
-    Language: English only (code, comments, commits)
-    Comments: Profanity is allowed and welcome. Fuck yeah.
-    Allowed languages: C, Assembly, Makefile, and Bash/Python only for build scripts (if Bash can't handle it)
-    Banned languages: C++, Zig, Rust (for the OS itself), and others
