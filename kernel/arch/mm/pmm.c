@@ -21,14 +21,17 @@ void pmm_init() {
 }
 
 void* pmm_alloc_page() {
-    for (uint64_t i = 0; i < TOTAL_PAGES; i++){
-        uint64_t byte_idx = i / 8;
-        uint8_t bit_idx = i % 8;
+    for (uint64_t i = 0; i < BITMAP_SIZE; i++) {
+        if (bitmap[i] != 0xFF) {
+            for (uint8_t bit = 0; bit < 8; bit++) {
+                if (!(bitmap[i] & (1 << bit))) {
+                    bitmap[i] |= (1 << bit);
+                    used_pages++;
 
-        if(!(bitmap[byte_idx] & (1 << bit_idx))) {
-            bitmap[byte_idx] |= (1 << bit_idx);
-            used_pages++;
-            return (void*)(i * PAGE_SIZE);
+                    uint64_t page_idx = (i * 8) + bit;
+                    return (void*)(page_idx  * PAGE_SIZE);
+                }
+            }
         }
     }
     vga_print("[MM] ERROR: Out of memory\n", COLOR_LIGHT_RED);
