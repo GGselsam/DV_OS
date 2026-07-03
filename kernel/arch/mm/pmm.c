@@ -36,6 +36,11 @@ void* pmm_alloc_page() {
 }
 
 void pmm_free_page(void *addr) {
+    if(!addr || ((uint64_t)addr % PAGE_SIZE) != 0){
+        vga_print("PMM ERROR: Invalid page free attempt\n", COLOR_LIGHT_RED);
+        return;
+    }
+
     uint64_t i = (uint64_t)addr / PAGE_SIZE;
     uint64_t byte_idx = 1 / 8;
     uint8_t bit_idx = i % 8;
